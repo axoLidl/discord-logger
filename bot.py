@@ -3,22 +3,27 @@ from discord.ext import commands
 import os
 from datetime import datetime
 
-intents = discord.Intents.all()
-bot = commands.Bot(command_prefix="!", intents=intents)
-
+# ───── НАСТРОЙКИ ─────
 LOG_CATEGORY_NAME = "logs"
+
 LOG_CHANNELS = {
     "messages": "logs-messages",
     "mod": "logs-mod",
     "server": "logs-server"
 }
 
+# ───── ИНТЕНТЫ ─────
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+# ───── ФАЙЛЫ ─────
 os.makedirs("logs", exist_ok=True)
 
 def write_log(filename, text):
     with open(f"logs/{filename}.log", "a", encoding="utf-8") as f:
-        f.write(f"[{datetime.now()}] {text}\n")
+        f.write(f"[{datetime.now().strftime('%d.%m.%Y %H:%M:%S')}] {text}\n")
 
+# ───── ПОЛУЧЕНИЕ ЛОГ-КАНАЛА ─────
 async def get_log_channel(guild, key):
     category = discord.utils.get(guild.categories, name=LOG_CATEGORY_NAME)
     if not category:
@@ -30,87 +35,162 @@ async def get_log_channel(guild, key):
 
     return channel
 
+# ───── ГОТОВ ─────
 @bot.event
 async def on_ready():
-    print(f"Bot online: {bot.user}")
+    print(f"Бот запущен: {bot.user}")
 
-# 🗑 Удаление сообщений
+# ───── СООБЩЕНИЯ ─────
+
 @bot.event
 async def on_message_delete(message):
-    if message.author.bot:
+    if not message.guild or message.author.bot:
         return
 
-    text = f"Message deleted | {message.author} | #{message.channel} | {message.content}"
-    write_log("messages", text)
+    text = (
+        f"Автор: {message.author}\n"
+        f"Канал: #{message.channel}\n\n"
+        f"Сообщение:\n{message.content}"
+    )
+
+    write_log("messages", f"Сообщение удалено | {message.author} | #{message.channel} | {message.content}")
 
     channel = await get_log_channel(message.guild, "messages")
-    embed = discord.Embed(title="🗑 Message deleted", description=text, color=discord.Color.red())
+    embed = discord.Embed(
+        title="🗑 Сообщение удалено",
+        description=text,
+        color=discord.Color.red()
+    )
     await channel.send(embed=embed)
 
-# ✏️ Редактирование сообщений
+
 @bot.event
 async def on_message_edit(before, after):
-    if before.author.bot or before.content == after.content:
+    if not before.guild or before.author.bot:
+        return
+    if before.content == after.content:
         return
 
-    text = f"Message edited | {before.author} | #{before.channel}\nBefore: {before.content}\nAfter: {after.content}"
-    write_log("messages", text)
+    text = (
+        f"Автор: {before.author}\n"
+        f"Канал: #{before.channel}\n\n"
+        f"Было:\n{before.content}\n\n"
+        f"Стало:\n{after.content}"
+    )
+
+    write_log(
+        "messages",
+        f"Сообщение отредактировано | {before.author} | #{before.channel} | "
+        f"Было: {before.content} | Стало: {after.content}"
+    )
 
     channel = await get_log_channel(before.guild, "messages")
-    embed = discord.Embed(title="✏️ Message edited", description=text, color=discord.Color.orange())
+    embed = discord.Embed(
+        title="✏️ Сообщение отредактировано",
+        description=text,
+        color=discord.Color.orange()
+    )
     await channel.send(embed=embed)
 
-# 🔨 Баны
+# ───── МОДЕРАЦИЯ ─────
+
 @bot.event
 async def on_member_ban(guild, user):
-    text = f"User banned: {user}"
-    write_log("mod", text)
+    text = f"Пользователь: {user}"
+
+    write_log("mod", f"Пользователь заблокирован | {user}")
 
     channel = await get_log_channel(guild, "mod")
-    await channel.send(embed=discord.Embed(title="🔨 Ban", description=text, color=discord.Color.dark_red()))
+    embed = discord.Embed(
+        title="🔨 Пользователь заблокирован",
+        description=text,
+        color=discord.Color.dark_red()
+    )
+    await channel.send(embed=embed)
+
 
 @bot.event
 async def on_member_unban(guild, user):
-    text = f"User unbanned: {user}"
-    write_log("mod", text)
+    text = f"Пользователь: {user}"
+
+    write_log("mod", f"Пользователь разблокирован | {user}")
 
     channel = await get_log_channel(guild, "mod")
-    await channel.send(embed=discord.Embed(title="♻️ Unban", description=text, color=discord.Color.green()))
+    embed = discord.Embed(
+        title="♻️ Пользователь разблокирован",
+        description=text,
+        color=discord.Color.green()
+    )
+    await channel.send(embed=embed)
 
-# 🛡 Роли
+
 @bot.event
 async def on_member_update(before, after):
-    if before.roles != after.roles:
-        added = set(after.roles) - set(before.roles)
-        removed = set(before.roles) - set(after.roles)
+    if before.roles == after.roles:
+        return
 
-        for role in added:
-            text = f"Role added: {after} -> {role.name}"
-            write_log("mod", text)
-            channel = await get_log_channel(after.guild, "mod")
-            await channel.send(embed=discord.Embed(title="🛡 Role added", description=text, color=discord.Color.blue()))
+    added_roles = set(after.roles) - set(before.roles)
+    removed_roles = set(before.roles) - set(after.roles)
 
-        for role in removed:
-            text = f"Role removed: {after} -> {role.name}"
-            write_log("mod", text)
-            channel = await get_log_channel(after.guild, "mod")
-            await channel.send(embed=discord.Embed(title="🛡 Role removed", description=text, color=discord.Color.blue()))
+    channel = await get_log_channel(after.guild, "mod")
 
-# ⚙️ Каналы
+    for role in added_roles:
+        if role.is_default():
+            continue
+
+        text = f"Пользователь: {after}\nРоль: {role.name}"
+        write_log("mod", f"Выдана роль | {after} | {role.name}")
+
+        embed = discord.Embed(
+            title="🛡 Выдана роль",
+            description=text,
+            color=discord.Color.blue()
+        )
+        await channel.send(embed=embed)
+
+    for role in removed_roles:
+        if role.is_default():
+            continue
+    text = f"Пользователь: {after}\nРоль: {role.name}"
+        write_log("mod", f"Снята роль | {after} | {role.name}")
+
+        embed = discord.Embed(
+            title="🛡 Снята роль",
+            description=text,
+            color=discord.Color.blue()
+        )
+        await channel.send(embed=embed)
+
+# ───── СЕРВЕР ─────
+
 @bot.event
 async def on_guild_channel_create(channel):
-    text = f"Channel created: {channel.name}"
-    write_log("server", text)
+    text = f"Канал: {channel.name}"
 
-    log = await get_log_channel(channel.guild, "server")
-    await log.send(embed=discord.Embed(title="➕ Channel created", description=text, color=discord.Color.green()))
+    write_log("server", f"Канал создан | {channel.name}")
+
+    log_channel = await get_log_channel(channel.guild, "server")
+    embed = discord.Embed(
+        title="➕ Канал создан",
+        description=text,
+        color=discord.Color.green()
+    )
+    await log_channel.send(embed=embed)
+
 
 @bot.event
 async def on_guild_channel_delete(channel):
-    text = f"Channel deleted: {channel.name}"
-    write_log("server", text)
+    text = f"Канал: {channel.name}"
 
-    log = await get_log_channel(channel.guild, "server")
-    await log.send(embed=discord.Embed(title="➖ Channel deleted", description=text, color=discord.Color.red()))
+    write_log("server", f"Канал удалён | {channel.name}")
 
+    log_channel = await get_log_channel(channel.guild, "server")
+    embed = discord.Embed(
+        title="➖ Канал удалён",
+        description=text,
+        color=discord.Color.red()
+    )
+    await log_channel.send(embed=embed)
+
+# ───── ЗАПУСК ─────
 bot.run(os.getenv("TOKEN"))
