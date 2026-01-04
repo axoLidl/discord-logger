@@ -1,0 +1,11 @@
+{
+  "logs": {
+    "messages": true,
+    "voice": true,
+    "members": true,
+    "roles": true,
+    "channels": true,
+    "moderation": true,
+    "server": true
+  }
+}
