@@ -132,7 +132,7 @@ async def on_member_update(before, after):
     added_roles = set(after.roles) - set(before.roles)
     removed_roles = set(before.roles) - set(after.roles)
 
-    channel = await get_log_channel(after.guild, "mod")
+    log_channel = await get_log_channel(after.guild, "mod")
 
     for role in added_roles:
         if role.is_default():
@@ -146,12 +146,13 @@ async def on_member_update(before, after):
             description=text,
             color=discord.Color.blue()
         )
-        await channel.send(embed=embed)
+        await log_channel.send(embed=embed)
 
     for role in removed_roles:
         if role.is_default():
             continue
-    text = f"Пользователь: {after}\nРоль: {role.name}"
+
+        text = f"Пользователь: {after}\nРоль: {role.name}"
         write_log("mod", f"Снята роль | {after} | {role.name}")
 
         embed = discord.Embed(
@@ -159,7 +160,7 @@ async def on_member_update(before, after):
             description=text,
             color=discord.Color.blue()
         )
-        await channel.send(embed=embed)
+        await log_channel.send(embed=embed)
 
 # ───── СЕРВЕР ─────
 
